@@ -10,6 +10,11 @@ var canvas = document.getElementById("display");
 canvas.style.backgroundColor = "#000";
 var ctx = canvas.getContext("2d");
 let [width, height] = [canvas.width, canvas.height];
+var [tx,ty] = [250,250]
+canvas.addEventListener('mousemove', e => {
+    tx = e.offsetX;
+    ty = e.offsetY;
+});
 
 var config = {
     pos: {
@@ -37,12 +42,12 @@ function draw() {
     let rotate = (x, y, ox, oy) => [x + ox * Math.cos(config.angle.theta) - oy * Math.sin(config.angle.theta), y + ox * Math.sin(config.angle.theta) + oy * Math.cos(config.angle.theta)];
     ctx.beginPath();
     ctx.strokeStyle = "#f00";
-    let targety = height-document.getElementsByName("targety")[0].value;
+    let targety = ty//height-document.getElementsByName("targety")[0].value;
     ctx.moveTo(0, targety);
     ctx.lineTo(width, targety);
     ctx.stroke();
     ctx.beginPath();
-    let targetx = document.getElementsByName("targetx")[0].value;
+    let targetx = tx//document.getElementsByName("targetx")[0].value;
     ctx.moveTo(targetx, 0);
     ctx.lineTo(targetx, height);
     ctx.stroke();
@@ -90,8 +95,8 @@ function update(dt) {
     if (config.pos.x >= width) config.vel.x = -Math.abs(config.vel.x);
 
     
-    let targety = height-document.getElementsByName("targety")[0].value;
-    let targetx = document.getElementsByName("targetx")[0].value;
+    let targety = ty//height-document.getElementsByName("targety")[0].value;
+    let targetx = tx//document.getElementsByName("targetx")[0].value;
     let targettheta = Math.min(1,Math.max(-1,(targetx-config.pos.x)*0.003-0.01*config.vel.x))
     function T_angle(a) {
         let delta = Math.min(a-targettheta, 2 * Math.PI - a+targettheta)*Math.sign(a- Math.PI);
