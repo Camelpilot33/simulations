@@ -11,7 +11,16 @@
 
 <body>
     <canvas id="display" width="500" height="500"></canvas><br>
-    <label for="assist">assist</label><input name="assist" type="checkbox"><br>
+    PID controller:<br>
+    <label for="assist">assist</label><input name="assist" type="checkbox" onclick="integral=0"><br>
+    Integral / predicted integral: <span id="integral">0</span><br>
+    <button onclick="integral=0">Reset integral term</button>
+    <button onclick="integral=(98/2*config.mass/0.003)">Set integral to predicted</button><hr>
+    Controls: <br>
+    Both rotors: S<br>
+    Left rotor: A<br>
+    Right rotor: D<br>
+    Adjust power: number keys 0-9<br>
     <!--label for="targety">target y</label><input name="targety" type="range" min="0" max="500" value="250"><br>
     <label for="targetx">target x</label><input name="targetx" type="range" min="0" max="500" value="250"><br>
     <!--label for="targettheta">target theta</label><input name="targettheta" type="range" min="0" max="360" value="0"><br-->

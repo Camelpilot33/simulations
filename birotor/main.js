@@ -1,8 +1,8 @@
 Number.prototype.mod = function (n) { return ((this % n) + n) % n; };
-function addvector(...v){
-	let sum = v[0]
-    for (i=1;i<v.length;i++) {
-    	sum = sum.map((e,j) => e + v[i][j]);
+function addvector(...v) {
+    let sum = v[0]
+    for (i = 1; i < v.length; i++) {
+        sum = sum.map((e, j) => e + v[i][j]);
     }
     return sum
 }
@@ -10,7 +10,7 @@ var canvas = document.getElementById("display");
 canvas.style.backgroundColor = "#000";
 var ctx = canvas.getContext("2d");
 let [width, height] = [canvas.width, canvas.height];
-var [tx,ty] = [250,250]
+var [tx, ty] = [250, 250]
 canvas.addEventListener('mousemove', e => {
     tx = e.offsetX;
     ty = e.offsetY;
@@ -29,8 +29,8 @@ var config = {
         theta: 0,
         dtheta: 0
     },
-    mass: 0.01,
-    length: 50,
+    mass: 0.03,
+    length: 30,
     thrust: {
         l: 0,
         r: 0
@@ -85,6 +85,9 @@ function draw() {
 
 }
 
+
+var integral = 0
+
 function update(dt) {
     if (config.pos.y >= height) {
         config.pos.y -= 0.1;
@@ -92,31 +95,37 @@ function update(dt) {
         // config.angle.dtheta = -config.angle.dtheta * 0.5;
     }
     if (config.pos.x <= 0) config.vel.x = Math.abs(config.vel.x * 0.5);
-    if (config.pos.x >= width) config.vel.x = -Math.abs(config.vel.x);
+    if (config.pos.x >= width) config.vel.x = -Math.abs(config.vel.x * 0.5);
 
-    
+
     let targety = ty//height-document.getElementsByName("targety")[0].value;
     let targetx = tx//document.getElementsByName("targetx")[0].value;
-    let targettheta = Math.min(1,Math.max(-1,(targetx-config.pos.x)*0.003-0.01*config.vel.x))
+    let targettheta = Math.min(1, Math.max(-1, (targetx - config.pos.x) * 0.003 - 0.009 * config.vel.x))
     function T_angle(a) {
-        let delta = Math.min(a-targettheta, 2 * Math.PI - a+targettheta)*Math.sign(a- Math.PI);
+        let delta = Math.min(a - targettheta, 2 * Math.PI - a + targettheta) * Math.sign(a - Math.PI);
         return [
-            delta*1.1,
-            -delta*1.1
+            delta * 1.1,
+            -delta * 1.1
         ]
     }
     function T_dangle(a) {
         return [
-            -a*1.5,
-            a*1.5
+            -a * 1.5,
+            a * 1.5
         ]
     }
+
     function T_y(y) {
-        return [0.01*(y-targety)+(98/2*config.mass),0.01*(y-targety)+(98/2*config.mass)];//set Fnet=>0
+        integral += (y - targety) * dt
+        return [
+            0.01 * (y - targety) + 0.003 * integral,//+(98/2*config.mass),
+            0.01 * (y - targety) + 0.003 * integral//+(98/2*config.mass)
+        ];//set Fnet=>0
     }
     function T_dy(dy) {
-        return [0.01*dy,0.01*dy];
+        return [0.01 * dy, 0.01 * dy];
     }
+    document.getElementById("integral").innerHTML = `${integral.toFixed(2)} / ${(98/2*config.mass/0.003).toFixed(2)}`;
     let assist = document.getElementsByName("assist")[0].checked;
     auto = addvector(
         T_angle(config.angle.theta),
@@ -124,13 +133,14 @@ function update(dt) {
         T_y(config.pos.y),
         T_dy(config.vel.y)
     )
-    
+
     config.thrust = {
-        l: auto[0]*assist,
-        r: auto[1]*assist
+        l: auto[0] * assist,
+        r: auto[1] * assist
     }
-    config.thrust.l = Math.min(10, Math.max(0, config.thrust.l))+(keys.a ? 2 : 0)+(keys.s ? 2 : 0);
-    config.thrust.r = Math.min(10, Math.max(0, config.thrust.r))+(keys.d ? 2 : 0)+(keys.s ? 2 : 0);
+    let pwr = num
+    config.thrust.l = Math.min(10, Math.max(0, config.thrust.l)) + (keys.a ? pwr : 0) + (keys.s ? pwr : 0);
+    config.thrust.r = Math.min(10, Math.max(0, config.thrust.r)) + (keys.d ? pwr : 0) + (keys.s ? pwr : 0);
 
     let F = [
         (config.thrust.l + config.thrust.r) * Math.sin(config.angle.theta) - config.mass * 0.1 * config.vel.x,
@@ -157,6 +167,7 @@ function update(dt) {
     config.pos = step.pos;
 }
 
+var num = 5
 var keys = {
     a: false,
     d: false,
@@ -167,10 +178,10 @@ window.addEventListener("keydown", (e) => {
         return;
     }
     let a = true;
-    //s:
     if (e.keyCode == 83) keys.s = a;
     if (e.keyCode == 65) keys.a = a;
     if (e.keyCode == 68) keys.d = a;
+    if (e.keyCode <= 57 && e.keyCode >= 48) num = e.keyCode - 47;
 });
 window.addEventListener("keyup", (e) => {
     if (e.isComposing || e.keyCode === 229) {
@@ -187,4 +198,3 @@ setInterval(() => {
     update(1 / fps);
     draw();
 }, 1000 / fps);
-
