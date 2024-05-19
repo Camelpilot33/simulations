@@ -11,10 +11,6 @@ canvas.style.backgroundColor = "#000";
 var ctx = canvas.getContext("2d");
 let [width, height] = [canvas.width, canvas.height];
 var [tx, ty] = [250, 250]
-canvas.addEventListener('mousemove', e => {
-    tx = e.offsetX;
-    ty = e.offsetY;
-});
 
 var config = {
     pos: {
@@ -40,6 +36,8 @@ var config = {
 function draw() {
     ctx.clearRect(0, 0, width, height);
     let rotate = (x, y, ox, oy) => [x + ox * Math.cos(config.angle.theta) - oy * Math.sin(config.angle.theta), y + ox * Math.sin(config.angle.theta) + oy * Math.cos(config.angle.theta)];
+
+    //target lines
     ctx.beginPath();
     ctx.strokeStyle = "#f00";
     let targety = ty//height-document.getElementsByName("targety")[0].value;
@@ -54,11 +52,12 @@ function draw() {
 
     //body
     ctx.strokeStyle = "#fff";
+    ctx.fillStyle = "#fff";
     ctx.beginPath();
     ctx.moveTo(...rotate(config.pos.x, config.pos.y, 5, 0));
     ctx.lineTo(...rotate(config.pos.x, config.pos.y, 0, -10));
     ctx.lineTo(...rotate(config.pos.x, config.pos.y, -5, 0));
-    ctx.stroke();
+    ctx.fill();
 
     ctx.beginPath();
     ctx.moveTo(...rotate(config.pos.x, config.pos.y, config.length, 0));
@@ -67,16 +66,16 @@ function draw() {
 
     let tf = 10
     //left rotor
-    let lrf = Math.sqrt((config.thrust.l * tf) ** 2 + config.length ** 2);
-    let ltf = -Math.atan2(config.thrust.l * tf, config.length);
+    let lrf = Math.sqrt((Math.sqrt(config.thrust.l) * tf) ** 2 + config.length ** 2);
+    let ltf = -Math.atan2(Math.sqrt(config.thrust.l) * tf, config.length);
     ctx.strokeStyle = "#0f0";
     ctx.beginPath();
     ctx.moveTo(config.pos.x - config.length * Math.cos(config.angle.theta), config.pos.y - config.length * Math.sin(config.angle.theta));
     ctx.lineTo(config.pos.x - lrf * Math.cos(ltf + config.angle.theta), config.pos.y - lrf * Math.sin(ltf + config.angle.theta));
     ctx.stroke();
     //right rotor
-    let rrf = Math.sqrt((config.thrust.r * tf) ** 2 + config.length ** 2);
-    let rtf = +Math.atan2(config.thrust.r * tf, config.length);
+    let rrf = Math.sqrt((Math.sqrt(config.thrust.r) * tf) ** 2 + config.length ** 2);
+    let rtf = +Math.atan2(Math.sqrt(config.thrust.r) * tf, config.length);
     ctx.strokeStyle = "#0f0";
     ctx.beginPath();
     ctx.moveTo(config.pos.x + config.length * Math.cos(config.angle.theta), config.pos.y + config.length * Math.sin(config.angle.theta));
@@ -97,7 +96,10 @@ function update(dt) {
     if (config.pos.x <= 0) config.vel.x = Math.abs(config.vel.x * 0.5);
     if (config.pos.x >= width) config.vel.x = -Math.abs(config.vel.x * 0.5);
 
-
+    tx+=2*(keys.right-keys.left);
+    ty+=2*(keys.down-keys.up);
+    tx = Math.min(width, Math.max(0, tx));
+    ty = Math.min(height, Math.max(0, ty));
     let targety = ty//height-document.getElementsByName("targety")[0].value;
     let targetx = tx//document.getElementsByName("targetx")[0].value;
     let targettheta = Math.min(1, Math.max(-1, (targetx - config.pos.x) * 0.003 - 0.009 * config.vel.x))
@@ -118,14 +120,17 @@ function update(dt) {
     function T_y(y) {
         integral += (y - targety) * dt
         return [
-            0.01 * (y - targety) + 0.003 * integral,//+(98/2*config.mass),
-            0.01 * (y - targety) + 0.003 * integral//+(98/2*config.mass)
+            0.01 * (y - targety) + 0.002 * integral,//+(98/2*config.mass),
+            0.01 * (y - targety) + 0.002 * integral//+(98/2*config.mass)
         ];//set Fnet=>0
     }
     function T_dy(dy) {
         return [0.01 * dy, 0.01 * dy];
     }
-    document.getElementById("integral").innerHTML = `${integral.toFixed(2)} / ${(98/2*config.mass/0.003).toFixed(2)}`;
+    if (document.getElementsByName("precalc")[0].checked) {
+        integral = (98 / 2 * config.mass / 0.002)
+    }
+    document.getElementById("integral").innerHTML = `${(integral).toFixed(2)} / ${(98 / 2 * config.mass / 0.002).toFixed(2)}`;
     let assist = document.getElementsByName("assist")[0].checked;
     auto = addvector(
         T_angle(config.angle.theta),
@@ -138,7 +143,6 @@ function update(dt) {
         l: auto[0] * assist,
         r: auto[1] * assist
     }
-    let pwr = num
     config.thrust.l = Math.min(10, Math.max(0, config.thrust.l)) + (keys.a ? pwr : 0) + (keys.s ? pwr : 0);
     config.thrust.r = Math.min(10, Math.max(0, config.thrust.r)) + (keys.d ? pwr : 0) + (keys.s ? pwr : 0);
 
@@ -167,30 +171,46 @@ function update(dt) {
     config.pos = step.pos;
 }
 
-var num = 5
+var pwr = 5
 var keys = {
     a: false,
     d: false,
     s: false,
+    up: false,
+    down: false,
+    left: false,
+    right: false
 };
+canvas.addEventListener('mousemove', e => {
+    tx = e.offsetX;
+    ty = e.offsetY;
+});
 window.addEventListener("keydown", (e) => {
-    if (e.isComposing || e.keyCode === 229) {
-        return;
-    }
-    let a = true;
-    if (e.keyCode == 83) keys.s = a;
-    if (e.keyCode == 65) keys.a = a;
-    if (e.keyCode == 68) keys.d = a;
-    if (e.keyCode <= 57 && e.keyCode >= 48) num = e.keyCode - 47;
+    if (e.isComposing || e.keyCode === 229) return;
+    if (e.code == "KeyW") document.getElementsByName("assist")[0].checked = !document.getElementsByName("assist")[0].checked;
+    if (e.code == "KeyE") document.getElementsByName("precalc")[0].checked = !document.getElementsByName("precalc")[0].checked;
+    if (e.key <= "9" && e.key >= "0") pwr = parseInt(e.key) + 1;
+
+    if (e.code == "ArrowUp") keys.up = true;
+    if (e.code == "ArrowDown") keys.down = true;
+    if (e.code == "ArrowLeft") keys.left = true;
+    if (e.code == "ArrowRight") keys.right = true;
+
+    if (e.code == "KeyS") keys.s = true;
+    if (e.code == "KeyA") keys.a = true;
+    if (e.code == "KeyD") keys.d = true;
 });
 window.addEventListener("keyup", (e) => {
-    if (e.isComposing || e.keyCode === 229) {
-        return;
-    }
-    let a = false;
-    if (e.keyCode == 83) keys.s = a;
-    if (e.keyCode == 65) keys.a = a;
-    if (e.keyCode == 68) keys.d = a;
+    if (e.isComposing || e.keyCode === 229) return;
+
+    if (e.code == "ArrowUp") keys.up = false;
+    if (e.code == "ArrowDown") keys.down = false;
+    if (e.code == "ArrowLeft") keys.left = false;
+    if (e.code == "ArrowRight") keys.right = false;
+
+    if (e.code == "KeyS") keys.s = false;
+    if (e.code == "KeyA") keys.a = false;
+    if (e.code == "KeyD") keys.d = false;
 });
 
 let fps = 60;
