@@ -131,27 +131,33 @@ function update(dt) {
     let v = EtoB(dx, dy, theta)
 
     //Friction
-    let s_fx = 0
-    let s_rx = 0
-    let s_fy = ((v.y+l_f*omega)*cos(phi)-v.x*sin(phi))/(v.x*cos(phi)+(v.y+l_f*omega)*sin(phi)+1e-20)
-    let s_ry = (v.y-l_r*omega)/(v.x+1e-20)
-    let s_f = Math.sqrt(s_fy**2+s_fx**2)+1e-20
-    let s_r = Math.sqrt(s_ry**2+s_rx**2)+1e-20
+    //Paper 1: https://dcsl.gatech.edu/papers/acc13b.pdf
+    // let s_fx = 0
+    // let s_rx = 0
+    // let s_fy = ((v.y+l_f*omega)*cos(phi)-v.x*sin(phi))/(v.x*cos(phi)+(v.y+l_f*omega)*sin(phi)+1e-20)
+    // let s_ry = (v.y-l_r*omega)/(v.x+1e-20)
+    // let s_f = Math.sqrt(s_fy**2+s_fx**2)+1e-20
+    // let s_r = Math.sqrt(s_ry**2+s_rx**2)+1e-20
+    // let μ_f = 1*sin(1.90*Math.atan(10*s_f))
+    // let μ_r = 1*sin(1.90*Math.atan(10*s_r))
+    // let μ_fx = -(s_fx/s_f)*μ_f
+    // let μ_fy = -(s_fy/s_f)*μ_f
+    // let μ_rx = -(s_rx/s_r)*μ_r
+    // let μ_ry = -(s_ry/s_r)*μ_r 
+    // let F_fz = m*9.81*(l_r-μ_rx*h)/(l_f+l_r+h*(μ_fx*cos(phi)+μ_fy*sin(phi)-μ_rx))
+    // let F_rz = m*9.81-F_fz
+    // let F_fx = μ_fx*F_fz
+    // let F_fy = μ_fy*F_fz
+    // let F_rx = μ_rx*F_rz
+    // let F_ry = μ_ry*F_rz
 
-    let μ_f = 1*sin(1.90*Math.atan(10*s_f))
-    let μ_r = 1*sin(1.90*Math.atan(10*s_r))
-    let μ_fx = -(s_fx/s_f)*μ_f
-    let μ_fy = -(s_fy/s_f)*μ_f
-    let μ_rx = -(s_rx/s_r)*μ_r
-    let μ_ry = -(s_ry/s_r)*μ_r 
-
-    let F_fz = m*9.81*(l_r-μ_rx*h)/(l_f+l_r+h*(μ_fx*cos(phi)+μ_fy*sin(phi)-μ_rx))
-    let F_rz = m*9.81-F_fz
-
-    let F_fx = μ_fx*F_fz
-    let F_fy = μ_fy*F_fz
-    let F_rx = μ_rx*F_rz
-    let F_ry = μ_ry*F_rz
+    //Paper 2: https://www.cs.cmu.edu/afs/cs/Web/People/motionplanning/reading/PlanningforDynamicVeh-1.pdf
+    let A = 0
+    let B = 0
+    let F_fx = 0
+    let F_rx = 0
+    let F_fy = -A*((v.y+l_f*1)/(v.x+1e-20)-phi)
+    let F_ry = -B*(v.y-l_r*1)/(v.x+1e-20)
 
     let dv_x = (F_u*cos(phi)+   F_fx * cos(phi) - F_fy * sin(phi) + F_rx) / m + v.y * omega;
     let dv_y = (F_u*sin(phi)+   F_fx * sin(phi) + F_fy * cos(phi) + F_ry) / m - v.x * omega;
