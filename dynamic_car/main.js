@@ -18,6 +18,8 @@ var car = {
     omega: 0,
     phi: 0,
     build: {
+        C_f: 10000,
+        C_r: 10000,
         I_z: 140,
         mass: 1000,
         wheels: {
@@ -28,7 +30,7 @@ var car = {
             geom: [0.4, 0.4, 0.3, 32]
         },
         body: [3.5, 1.5, 0.7],
-        F_max: 1000,
+        F_max: 10000,
         steer_max: Math.PI / 4,
     },
     debug: {
@@ -125,7 +127,7 @@ function update(dt) {
     let dx = car.vel.x;
     let dy = car.vel.y;
     let h = car.build.wheels.h;
-    let BtoE = (bx, by, a) => new THREE.Vector2(bx * Math.cos(a) - by * Math.sin(a), bx * Math.sin(a) + by * Math.cos(a)),EtoB = (ex, ey, a) => new THREE.Vector2(ex * Math.cos(a) + ey * Math.sin(a), -ex * Math.sin(a) + ey * Math.cos(a));
+    let BtoE = (bx, by, a) => new THREE.Vector2(bx * Math.cos(a) - by * Math.sin(a), bx * Math.sin(a) + by * Math.cos(a)), EtoB = (ex, ey, a) => new THREE.Vector2(ex * Math.cos(a) + ey * Math.sin(a), -ex * Math.sin(a) + ey * Math.cos(a));
     let cos = Math.cos;
     let sin = Math.sin;
     let v = EtoB(dx, dy, theta)
@@ -151,25 +153,27 @@ function update(dt) {
     // let F_rx = μ_rx*F_rz
     // let F_ry = μ_ry*F_rz
 
-    //Paper 2: https://www.cs.cmu.edu/afs/cs/Web/People/motionplanning/reading/PlanningforDynamicVeh-1.pdf
-    let A = 0
-    let B = 0
+    let alpha_f = phi-Math.atan2(v.y + l_f * omega, v.x);
+    let alpha_r = -Math.atan2(v.y-l_r * omega, v.x);
+    let C_f = car.build.C_f;  // Cornering stiffness for front tires
+    let C_r = car.build.C_r;  // Cornering stiffness for rear tires
+    let F_fy = C_f * alpha_f;//* Math.sqrt(v.x**2+v.y**2)
+    let F_ry = C_r * alpha_r;//* Math.sqrt(v.x**2+v.y**2);
+
     let F_fx = 0
     let F_rx = 0
-    let F_fy = -A*((v.y+l_f*1)/(v.x+1e-20)-phi)
-    let F_ry = -B*(v.y-l_r*1)/(v.x+1e-20)
 
-    let dv_x = (F_u*cos(phi)+   F_fx * cos(phi) - F_fy * sin(phi) + F_rx) / m + v.y * omega;
-    let dv_y = (F_u*sin(phi)+   F_fx * sin(phi) + F_fy * cos(phi) + F_ry) / m - v.x * omega;
-    let domega = (l_f*(F_fx*sin(phi)+F_fy*cos(phi))-l_r*F_ry) / I_z;
-    window.debuga = [v.x,v.y,[dv_x,dv_y,domega]]
+    let dv_x = (F_u * cos(phi) + F_fx * cos(phi) - F_fy * sin(phi) + F_rx) / m + v.y * omega;
+    let dv_y = (F_u * sin(phi) + F_fx * sin(phi) + F_fy * cos(phi) + F_ry) / m - v.x * omega;
+    let domega = (l_f * ((F_fx+F_u) * sin(phi) + F_fy * cos(phi)) - l_r * F_ry) / I_z;
+    window.debuga = [alpha_r].map(x => x.toFixed(2))
 
 
     let newstate = {
         pos: car.pos.clone().add(car.vel.clone().multiplyScalar(dt)),
         theta: car.theta + car.omega * dt,
         vel: car.vel.clone().add(BtoE(dv_x, dv_y, car.theta).multiplyScalar(dt)),
-        omega: car.omega+domega*dt,
+        omega: car.omega + domega * dt,
         phi: car.phi,
     }
 
