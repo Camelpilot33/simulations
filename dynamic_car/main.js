@@ -1,15 +1,16 @@
 import * as THREE from 'three';
 import WebGL from 'three/addons/capabilities/WebGL.js';
-import * as a from 'https://unpkg.com/three@0.157.0/examples/jsm/controls/OrbitControls.js';
-import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
-let OrbitControls = a.OrbitControls;
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { TextGeometry } from 'three/addons/geometries/TextGeometry.js';
+import { FontLoader } from 'three/addons/loaders/FontLoader.js';
 
-var camera, scene, renderer, controls, car3d;
+var camera, scene, renderer, controls, car3d, HUD;
 var keys = {
     w: false,
     a: false,
     s: false,
     d: false,
+    p: false,
 }
 var car = {
     pos: new THREE.Vector2(0, 0),
@@ -20,6 +21,7 @@ var car = {
     build: {
         C_f: 10000,
         C_r: 10000,
+        C_drift: 2000,
         I_z: 140,
         mass: 1000,
         wheels: {
@@ -30,22 +32,26 @@ var car = {
             geom: [0.4, 0.4, 0.3, 32]
         },
         body: [3.5, 1.5, 0.7],
-        F_max: 10000,
-        steer_max: Math.PI / 4,
+        F_max: 20000,
+        steer_max: Math.PI / 6,
     },
     debug: {
         prevpos: new THREE.Vector2(0, 0),
+        lines: new THREE.Group(),
     }
 }
+
+window.perf = new Array(100).fill(0)
 
 function three_init() {
     renderer = new THREE.WebGLRenderer();
     renderer.setSize(window.innerWidth, window.innerHeight);
+    renderer.setPixelRatio( window.devicePixelRatio/2 );
     document.body.appendChild(renderer.domElement);
 
     //camera
-    camera = new THREE.PerspectiveCamera(70, window.innerWidth / window.innerHeight);
-    camera.position.set(-20, 0, 14);
+    camera = new THREE.PerspectiveCamera(90, window.innerWidth / window.innerHeight);
+    camera.position.set(-20/2, 0, 14/2);
     camera.up.set(0, 0, 1);
     controls = new OrbitControls(camera, renderer.domElement);
     controls.enablePan = false;
@@ -56,13 +62,19 @@ function three_init() {
         MIDDLE: THREE.MOUSE.DOLLY,
         RIGHT: THREE.MOUSE.ROTATE,
     }
+    controls.keys = {
+        LEFT: 'ArrowLeft', //left arrow
+        UP: 'ArrowUp', // up arrow
+        RIGHT: 'ArrowRight', // right arrow
+        BOTTOM: 'ArrowDown' // down arrow
+    }
 
     //scene
     scene = new THREE.Scene();
     scene.background = new THREE.Color(0xffffff);
 
     //grid
-    const gridHelper = new THREE.GridHelper(1000, 30, 0, 0xaaaaaa);
+    const gridHelper = new THREE.GridHelper(10000, 300, 0, 0xaaaaaa);
     gridHelper.rotation.x = Math.PI / 2;
 
     // car
@@ -88,10 +100,43 @@ function three_init() {
     wheelmesh.position.set(-car.build.wheels.lr, -car.build.wheels.ydist2, car.build.wheels.h);
     wheels.add(wheelmesh);
 
+    const loader = new FontLoader();
+
+    loader.load('Cousine_Regular.json', function (font) {
+        const textMaterial = new THREE.MeshPhongMaterial(
+            { color: 0xff0000, specular: 0 }
+        );
+        let helptext = new TextGeometry('Use WASD to drive', {
+            font: font,
+            size: 2,
+            depth: 1,
+            curveSegments: 2,
+        });
+        let help = new THREE.Mesh(helptext, textMaterial);
+        help.position.set(100/3, 14, 0);
+        help.scale.set(1, 1, 0.01);
+        help.rotation.x = Math.PI / 2;
+        help.rotation.y = -Math.PI / 2;
+        scene.add(help);
+
+        let hudtext = new TextGeometry('Speed: 0 mph', {
+            font: font,
+            size: 1,
+            depth: 1,
+            curveSegments: 2,
+        });
+        HUD = new THREE.Mesh( hudtext, textMaterial );
+        camera.add(HUD);
+        HUD.position.set(-2.5, -5, -10);
+        HUD.scale.set(0.5, 0.5, 0.003);
+        HUD.rotation.x = -0.3;
+        // HUD.rotation.y = -Math.PI / 2;
+    });
+
     car3d = new THREE.Object3D();
     car3d.add(bodymesh);
     car3d.add(wheels);
-    car3d.add(camera)
+    car3d.add(camera);
 
     // lights
     var light = new THREE.AmbientLight(0xffffff, 0.5);
@@ -108,13 +153,19 @@ function three_init() {
         camera.updateProjectionMatrix();
         renderer.setSize(window.innerWidth, window.innerHeight);
     }, false);
+
+    scene.add(car.debug.lines);
 }
 
 
 function update(dt) {
+
     //controls
     let F_u = keys.w ? car.build.F_max : 0 - (keys.s ? car.build.F_max : 0);
-    car.phi = Math.max(-car.build.steer_max, Math.min(car.build.steer_max, car.phi + (keys.a - keys.d) * 0.1));
+    if (keys.p) F_u /= 2;
+    car.phi = Math.max(-car.build.steer_max, Math.min(car.build.steer_max, car.phi + (keys.a - keys.d) * dt));
+    if (!keys.a && !keys.d) car.phi = car.phi * (1 - dt);
+
 
     //quick
     let m = car.build.mass;
@@ -153,21 +204,21 @@ function update(dt) {
     // let F_rx = μ_rx*F_rz
     // let F_ry = μ_ry*F_rz
 
-    let alpha_f = phi-Math.atan2(v.y + l_f * omega, v.x);
-    let alpha_r = -Math.atan2(v.y-l_r * omega, v.x);
-    let C_f = car.build.C_f;  // Cornering stiffness for front tires
-    let C_r = car.build.C_r;  // Cornering stiffness for rear tires
-    let F_fy = C_f * alpha_f;//* Math.sqrt(v.x**2+v.y**2)
-    let F_ry = C_r * alpha_r;//* Math.sqrt(v.x**2+v.y**2);
+    let drift = C => (keys.p ? car.build.C_drift : C)*(Math.E**(-Math.sqrt(dx**2+dy**2)/100))
+    let alpha_f = phi - Math.atan2(v.y + l_f * omega, v.x);
+    let alpha_r = -Math.atan2(v.y - l_r * omega, v.x);
+    let C_f = drift(car.build.C_f);  // Cornering stiffness for front tires
+    let C_r = drift(car.build.C_r);  // Cornering stiffness for rear tires
+    let F_fy = C_f * alpha_f * Math.sqrt(v.x ** 2 + v.y ** 2)
+    let F_ry = C_r * alpha_r * Math.sqrt(v.x ** 2 + v.y ** 2);
 
-    let F_fx = 0
-    let F_rx = 0
+    let fric=(a) => Math.sqrt(Math.abs(a))*Math.sign(a)
+    let F_fx = -fric(v.x) * 100
+    let F_rx = -fric(v.x) * 100//(keys.p?-1000:0)
 
     let dv_x = (F_u * cos(phi) + F_fx * cos(phi) - F_fy * sin(phi) + F_rx) / m + v.y * omega;
     let dv_y = (F_u * sin(phi) + F_fx * sin(phi) + F_fy * cos(phi) + F_ry) / m - v.x * omega;
-    let domega = (l_f * ((F_fx+F_u) * sin(phi) + F_fy * cos(phi)) - l_r * F_ry) / I_z;
-    window.debuga = [alpha_r].map(x => x.toFixed(2))
-
+    let domega = (l_f * ((F_fx + F_u) * sin(phi) + F_fy * cos(phi)) - l_r * F_ry) / I_z;
 
     let newstate = {
         pos: car.pos.clone().add(car.vel.clone().multiplyScalar(dt)),
@@ -183,7 +234,22 @@ function update(dt) {
     car.omega = newstate.omega;
     car.phi = newstate.phi;
 
+    //debug
+    window.debuga = (Math.E**(-Math.sqrt(dx**2+dy**2)/10));
+    if (Math.random() > 0.999) HUD.geometry = new TextGeometry(`Speed: ${(Math.sqrt(dx ** 2 + dy ** 2) * 0.621371).toFixed(1)} mph`, {
+        font: HUD.geometry.parameters.options.font,
+        size: HUD.geometry.parameters.options.size,
+        depth: HUD.geometry.parameters.options.depth,
+        curveSegments: HUD.geometry.parameters.options.curveSegments,
+    });
 
+    // for (let ch of scene.children) if (ch instanceof THREE.Line && ch.material.color.b * 255 < 0.1) scene.remove(ch);
+    // scene.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(car.pos.x, car.pos.y, 1), new THREE.Vector3(car.pos.x + dx, car.pos.y + dy, 1)]), new THREE.LineBasicMaterial({ color: 1 })));
+
+    if (Math.random() > 0.999) {
+        car.debug.lines.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints([car.debug.prevpos, car.pos]), new THREE.LineBasicMaterial({ color: 0 })));
+        car.debug.prevpos = car.pos.clone();
+    }
 
     //update car
     car3d.rotation.z = car.theta;
@@ -198,7 +264,9 @@ function animate() {
     requestAnimationFrame(animate);
     delta = clock.getDelta();
     //update
-    update(delta);
+    perf.push(delta);
+    perf.shift();
+    for (let i = 0; i < 1000; i++) update(delta / 1000);
     controls.update();
     camera.lookAt(car3d.position)
     renderer.render(scene, camera);
