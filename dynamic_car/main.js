@@ -84,7 +84,8 @@ class Engine { //sample engine edited from https://github.com/Antonio-R1/engine-
     }
 }
 
-var camera, scene, renderer, controls, car3d, HUD, frameId;
+
+var camera, scene, renderer, controls, car3d, HUD, frameId, updateFrequency;
 window.freeze = () => { cancelAnimationFrame(frameId) }
 var keys = {
     w: false,
@@ -237,6 +238,54 @@ function three_init() {
     scene.add(car.debug.lines);
 }
 
+function audio_init() {
+    let e1, i1, p, s1;
+    let o = x => {
+        e1 = (n) => n > .75 && n < 1 ? -Math.sin(4 * Math.PI * n) : 0
+        i1 = (n) => n > 0 && n < .25 ? Math.sin(4 * Math.PI * n) : 0
+        p = (n) => Math.cos(4 * Math.PI * n)
+        s1 = (n, r) => n > 2 * r && n < 2.5 * r ? Math.sin(2 * Math.PI * n / r) : 0
+        return i1(x) + p(x) + s1(x, 0.3) + e1(x) + Math.random() * 2;
+    }
+    const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    const sampleRate = audioCtx.sampleRate;
+    const bufferSize = 4096;
+    const scriptNode = audioCtx.createScriptProcessor(bufferSize, 1, 1);
+    const gainNode = audioCtx.createGain();
+    const biquadFilter = audioCtx.createBiquadFilter();
+    biquadFilter.type = 'lowpass';
+    biquadFilter.frequency.value = 150;
+    scriptNode.connect(biquadFilter);
+    biquadFilter.connect(gainNode);
+    gainNode.connect(audioCtx.destination);
+    let frequency = parseFloat(car.engine.rpm / 120);
+    updateFrequency = () => {
+        frequency = parseFloat(car.engine.rpm / 120);
+        if (frequency < 2) frequency = 2;
+        gainNode.gain.value = Math.max(1, (1 / (Math.abs(frequency - 6.25) + 2.5) + 0.6));
+    }
+    let phase = 0;
+    scriptNode.onaudioprocess = function (audioProcessingEvent) {
+        const outputBuffer = audioProcessingEvent.outputBuffer;
+        const outputData = outputBuffer.getChannelData(0);
+
+        for (let i = 0; i < outputBuffer.length; i++) {
+            // Generate the wave sample based on the phase
+            outputData[i] = o(phase);
+
+            // Increment the phase, wrapping around at 1
+            phase += frequency / sampleRate;
+            if (phase >= 1) {
+                phase -= 1;
+            }
+        }
+    };
+    document.body.addEventListener("click", () => {
+        if (audioCtx.state === 'suspended') {
+            audioCtx.resume();
+        }
+    });
+}
 
 function update(dt) {
     let m = car.build.mass;
@@ -254,6 +303,7 @@ function update(dt) {
     let sin = Math.sin;
     let v = EtoB(dx, dy, theta)
 
+    //Friction/Traction
     let mu_static = 20; // Static coefficient of friction (tune as needed)
     let k = 0.05; // Decrease rate of friction with speed (tune as needed)
     let N_f = car.build.mass / 2; // Normal force on the front tires (tune as needed)
@@ -323,11 +373,41 @@ function update(dt) {
 
     // for (let ch of scene.children) if (ch instanceof THREE.Line && ch.material.color.b * 255 < 0.1) scene.remove(ch);
     // scene.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(car.pos.x, car.pos.y, 1), new THREE.Vector3(car.pos.x + dx, car.pos.y + dy, 1)]), new THREE.LineBasicMaterial({ color: 1 })));
+    // car.debug.lines.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints([car.debug.prevpos, car.pos]), new THREE.LineBasicMaterial({ color: 0xffffff })));
+    // car.debug.prevpos = car.pos.clone();
 
-    // if (Math.random() > 0.999) {
-    //     car.debug.lines.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints([car.debug.prevpos, car.pos]), new THREE.LineBasicMaterial({ color: 0 })));
-    //     car.debug.prevpos = car.pos.clone();
-    // }
+    let circleGeometry = new THREE.CircleGeometry(car.build.wheels.geom[2] / 2, 32);
+    let circleMaterial = new THREE.MeshBasicMaterial({ color: 0xaaaaaa });
+
+    if (Math.random() > 1 - dt * 200) {
+        if (Math.abs(alpha_r) > 0.14 && speed > 10) {
+            let circleMeshl = new THREE.Mesh(circleGeometry, circleMaterial);
+            let circleMeshr = new THREE.Mesh(circleGeometry, circleMaterial);
+            circleMeshl.userData.type = Date.now();
+            circleMeshr.userData.type = Date.now();
+            circleMeshl.position.set(car.pos.x + BtoE(-car.build.wheels.lr, car.build.wheels.ydist2, theta).x, car.pos.y + BtoE(-car.build.wheels.lr, car.build.wheels.ydist2, theta).y, 0);
+            circleMeshr.position.set(car.pos.x + BtoE(-car.build.wheels.lr, -car.build.wheels.ydist2, theta).x, car.pos.y + BtoE(-car.build.wheels.lr, -car.build.wheels.ydist2, theta).y, 0);
+            scene.add(circleMeshl);
+            scene.add(circleMeshr);
+        }
+        // } else if (Math.abs(alpha_f) > 0.2) {
+        //     let circleMeshl = new THREE.Mesh(circleGeometry, circleMaterial);
+        //     let circleMeshr = new THREE.Mesh(circleGeometry, circleMaterial);
+        //     circleMeshl.userData.type = 'mark'
+        //     circleMeshr.userData.type = 'mark'
+        //     circleMeshl.position.set(car.pos.x + BtoE(car.build.wheels.lf, car.build.wheels.ydist2, theta).x, car.pos.y + BtoE(car.build.wheels.lf, car.build.wheels.ydist2, theta).y, 0);
+        //     circleMeshr.position.set(car.pos.x + BtoE(car.build.wheels.lf, -car.build.wheels.ydist2, theta).x, car.pos.y + BtoE(car.build.wheels.lf, -car.build.wheels.ydist2, theta).y, 0);
+        //     scene.add(circleMeshl);
+        //     scene.add(circleMeshr);
+        // }
+        for (let j = scene.children.length - 1; j >= 0; j--) {
+            let child = scene.children[j];
+            if (child.userData.type < Date.now()-10000) scene.remove(child);
+        }
+    }
+
+
+
 
     //update car
     car3d.rotation.z = car.theta;
@@ -338,6 +418,7 @@ function update(dt) {
 
 var clock = new THREE.Clock();
 var delta = 0;
+let hz = 60000;
 function animate() {
     frameId = requestAnimationFrame(animate);
     delta = clock.getDelta();
@@ -345,9 +426,10 @@ function animate() {
     perf.shift();
 
     delta = Math.max(1e-3, Math.min(0.1, delta));
-    for (let i = 0; i < 1000; i++) {
-        update(delta / 1000);
+    for (let i = 0; i < hz / 60; i++) {
+        update(delta / hz * 60);
     }
+    updateFrequency();
     try {
         HUD.geometry = new TextGeometry(
             `${(car.vel.length() * 2.237).toFixed(1)} mph\n${car.gear} / ${car.engine.rpm.toFixed(0)}`,
@@ -375,7 +457,8 @@ document.addEventListener("keyup", (event) => {
 
 if (WebGL.isWebGLAvailable()) {
     three_init();
-    car.engine.start()
+    car.engine.start();
+    audio_init();
     animate();
 } else {
     const warning = WebGL.getWebGLErrorMessage();
